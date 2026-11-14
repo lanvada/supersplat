@@ -463,7 +463,21 @@ class Scene {
             .reverse()
             .forEach((element) => this.remove(element));
         this.teardown.abort();
+        // the app forgets its device as it destroys it
+        const device = this.app.graphicsDevice;
         this.app.destroy();
+        // What nothing above destroys by name is still listed on the device:
+        // the renderer's caches, the camera's targets. A browser may free a
+        // destroyed device's resources only as their wrappers are collected,
+        // which nothing prompts while the memory they hold is the GPU's.
+        [...device.targets].forEach((target) => target.destroy());
+        [...device.textures].forEach((texture) => texture.destroy());
+        [...device.buffers].forEach((buffer) => buffer.destroy());
+        // The engine's renderer keeps the device it last drew with in module
+        // scope, and a destroyed device still holds its handlers, the scene's
+        // own among them: they would keep the scene and its data alive until
+        // another instance draws.
+        device.off();
     }
 
     // elements removed while their add() was still awaiting element.add().
