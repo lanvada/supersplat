@@ -133,7 +133,8 @@ const showBackground = (container: HTMLElement, clr: Color) => {
 
 const renderStats = () => {
     const slot = slots.get(MAIN);
-    const rows: [string, string][] = [];
+    // the browser first: a screenshot of these rows is then a complete report
+    const rows: [string, string][] = [['Browser', navigator.userAgent]];
 
     if (slot) {
         const { adapter, load, spin } = slot;
@@ -495,15 +496,20 @@ const numberOf = (id: string, fallback: number) => {
 };
 
 element<HTMLInputElement>('file').addEventListener('change', (event) => {
-    const file = (event.target as HTMLInputElement).files?.[0];
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
     if (!file) {
         return;
     }
+    // cleared so that picking the same file again is a change again
+    input.value = '';
     lastFile = file;
     run(async () => {
         if (slots.has(MAIN)) {
             destroy(MAIN);
         }
+        // a large file takes a while and nothing else shows that it is under way
+        log(`loading ${file.name} (${round(file.size / 1048576)} MB)`);
         await create(MAIN);
         await load(MAIN, file.name, file, loadOptions());
     });
