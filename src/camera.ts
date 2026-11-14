@@ -421,7 +421,7 @@ class Camera extends Element {
             }
         );
 
-        const target = document.getElementById('canvas-container');
+        const target = scene.container;
         this.controller = new PointerController(this, target);
 
         // apply scene config

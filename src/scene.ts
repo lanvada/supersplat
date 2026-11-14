@@ -89,6 +89,8 @@ class Scene {
     events: Events;
     config: SceneConfig;
     canvas: HTMLCanvasElement;
+    // observed for size and listened on for pointer input
+    container: HTMLElement;
     app: PCApp;
     wire: WireRenderer;
     worldLayer: Layer;
@@ -216,11 +218,13 @@ class Scene {
         config: SceneConfig,
         canvas: HTMLCanvasElement,
         graphicsDevice: GraphicsDevice,
-        commandQueue: CommandQueue
+        commandQueue: CommandQueue,
+        container: HTMLElement = window.document.getElementById('canvas-container')
     ) {
         this.events = events;
         this.config = config;
         this.canvas = canvas;
+        this.container = container;
         this.commandQueue = commandQueue;
 
         let resolve = true;
@@ -308,7 +312,7 @@ class Scene {
             }
         });
 
-        const canvasContainer = window.document.getElementById('canvas-container');
+        const canvasContainer = container;
         observer.observe(canvasContainer);
 
         // Uniform "user is dragging" signal for every tool. canvasContainer is the
