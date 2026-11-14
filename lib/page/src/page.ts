@@ -57,6 +57,10 @@ const slots = new Map<string, Slot>();
 let fixedSize: { width: number; height: number } | null = null;
 let lastFile: File | null = null;
 let heapSamples: (number | null)[] = [];
+// One action of the controls at a time. Each awaits the kernel, and a second
+// one started meanwhile would create or destroy an instance under the first:
+// two cores for one slot, of which only the later could ever be destroyed.
+let busy = false;
 
 const element = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -177,9 +181,10 @@ const renderStats = () => {
         })
     );
 
-    element<HTMLButtonElement>('spin').disabled = !slot?.filename;
-    element<HTMLButtonElement>('destroy').disabled = !slot;
-    element<HTMLButtonElement>('cycle').disabled = !lastFile;
+    element<HTMLInputElement>('file').disabled = busy;
+    element<HTMLButtonElement>('spin').disabled = busy || !slot?.filename;
+    element<HTMLButtonElement>('destroy').disabled = busy || !slot;
+    element<HTMLButtonElement>('cycle').disabled = busy || !lastFile;
 };
 
 // Sizes the viewports created from now on to a fixed CSS size instead of the
@@ -464,10 +469,19 @@ window.__page = page;
 // user interface
 
 const run = (action: () => Promise<unknown> | void) => {
+    if (busy) {
+        return;
+    }
+    busy = true;
+    renderStats();
     Promise.resolve()
         .then(action)
         .catch((error) => {
             console.error(error);
+        })
+        .finally(() => {
+            busy = false;
+            renderStats();
         });
 };
 
