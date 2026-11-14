@@ -1,0 +1,48 @@
+{
+    "expectedMissing": {
+        "showPopup": "The asset loader asks which LOD to load through a popup only when it is called without load options. The entry's load() always passes them, and the library has no popup to show.",
+        "import": "editor.files.importUrl() loads through the file handler, which the library leaves out. A host loads through the entry's load().",
+        "scene.write": "editor.files.export() writes through the file handler, which the library leaves out. The library does not export.",
+        "render.offscreen": "editor.viewport.render() captures through src/render.ts, which imports the video encoder. The library does not capture offscreen."
+    },
+    "dynamic": [
+        {
+            "module": "src/editor.ts",
+            "call": "function",
+            "expression": "`view.${name}`",
+            "names": [
+                "view.splatsColorBlend",
+                "view.splatsSelectionBlend",
+                "view.centersColorBlend",
+                "view.centersSelectionBlend",
+                "view.ringsColorBlend",
+                "view.ringsSelectionBlend"
+            ],
+            "from": "the `blends` table of registerEditorEvents"
+        },
+        {
+            "module": "src/editor.ts",
+            "call": "invoke",
+            "expression": "get",
+            "names": ["view.gaussians", "view.centers", "view.rings", "view.selectionCenters", "view.selectionRings"],
+            "from": "the first column of the `profileFlags` table of registerEditorEvents"
+        },
+        {
+            "module": "src/editor-session.ts",
+            "call": "invoke",
+            "expression": "name",
+            "names": [
+                "grid.visible",
+                "view.bands",
+                "camera.tonemapping",
+                "view.gaussians",
+                "view.centers",
+                "view.rings",
+                "view.selectionColor",
+                "view.selectionCenters",
+                "view.selectionRings"
+            ],
+            "from": "the values of the VIEW_QUERIES table"
+        }
+    ]
+}

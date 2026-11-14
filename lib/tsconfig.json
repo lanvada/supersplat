@@ -1,0 +1,18 @@
+{
+    // The library entry and the bare page, type-checked with upstream's compiler
+    // options. `paths` replaces the root config's instead of merging with it, so
+    // the engine pin is restated here.
+    "extends": "../tsconfig.json",
+    "compilerOptions": {
+        "paths": {
+            "playcanvas": ["../node_modules/playcanvas"],
+
+            // The page consumes the built library like any other consumer: its
+            // declarations once they are built, the entry's source before that
+            // (so an editor resolves the import on a clean tree).
+            "supersplat-lib": ["./dist/types/lib/src/index.d.ts", "./src/index.ts"]
+        }
+    },
+    "include": ["./src/**/*.ts", "./page/src/**/*.ts", "../global.d.ts"],
+    "exclude": ["dist", "page/dist"]
+}
