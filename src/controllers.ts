@@ -475,8 +475,9 @@ class PointerController {
                 fn(event as T);
             };
             target.addEventListener(name, callback, options);
+            const previous = destroy;
             destroy = () => {
-                destroy?.();
+                previous?.();
                 target.removeEventListener(name, callback);
             };
         };
