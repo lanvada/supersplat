@@ -121,6 +121,18 @@ const heapBytes = () => {
     return memory ? memory.usedJSHeapSize : null;
 };
 
+const megabytes = (bytes: number) => String(round(bytes / 1048576));
+
+// filled in by the build
+const build = document.querySelector<HTMLMetaElement>('meta[name="build"]')?.content || 'unknown';
+
+// The heap falls when the browser collects, which no event announces: this
+// one cell is refreshed on a timer, in place, so that a selection made to
+// copy the panel survives.
+const HEAP_NOW = 'JS heap now (MB)';
+const HEAP_REFRESH_MS = 2000;
+let heapNowCell: HTMLElement | null = null;
+
 const slotOf = (id: string) => {
     const slot = slots.get(id);
     if (!slot) {
@@ -153,8 +165,12 @@ const showBackground = (container: HTMLElement, clr: Color) => {
 const renderStats = () => {
     const slot = slots.get(MAIN);
     const figures: Figures | null = slot ?? lastFigures;
-    // the browser first: a screenshot of these rows is then a complete report
-    const rows: [string, string][] = [['Browser', navigator.userAgent]];
+    // the browser and the build first: a screenshot of these rows is then a
+    // complete report
+    const rows: [string, string][] = [
+        ['Browser', navigator.userAgent],
+        ['Page build', build]
+    ];
 
     if (figures) {
         const { adapter, load, spin } = figures;
@@ -185,18 +201,30 @@ const renderStats = () => {
             ]);
         }
     }
-    if (destroyedCount > 0) {
-        rows.push(['Destroyed instances', `${destroyedCount}, of which the browser has collected ${collectedCount}`]);
-    }
-    if (heapSamples.length > 0) {
+    rows.push([
+        'Destroyed instances',
+        destroyedCount === 0 ? 'none yet' : `${destroyedCount}, of which the browser has collected ${collectedCount}`
+    ]);
+    const heap = heapBytes();
+    if (heap === null) {
         rows.push([
-            'JS heap after each cycle (MB)',
-            heapSamples.every((bytes) => bytes === null)
-                ? 'this browser gives no heap figure: read the size of its processes from the system instead'
-                : heapSamples.map((bytes) => (bytes === null ? 'n/a' : round(bytes / 1048576))).join(', ')
+            'JS heap',
+            'this browser gives no heap figure: read the size of its processes from the system instead'
         ]);
+    } else {
+        rows.push([HEAP_NOW, megabytes(heap)]);
+        if (heapSamples.length > 0) {
+            // sampled before the browser collects what the cycle destroyed:
+            // they say whether memory grows from one cycle to the next, not
+            // how much is held
+            rows.push([
+                'JS heap right after each cycle (MB)',
+                `${heapSamples.map((bytes) => (bytes === null ? 'n/a' : megabytes(bytes))).join(', ')} (before the browser collects: compare them with each other)`
+            ]);
+        }
     }
 
+    heapNowCell = null;
     const list = element<HTMLDListElement>('stats');
     list.replaceChildren(
         ...rows.flatMap(([name, value]) => {
@@ -204,6 +232,9 @@ const renderStats = () => {
             dt.textContent = name;
             const dd = document.createElement('dd');
             dd.textContent = value;
+            if (name === HEAP_NOW) {
+                heapNowCell = dd;
+            }
             return [dt, dd];
         })
     );
@@ -590,3 +621,16 @@ if (!navigator.gpu) {
 }
 
 renderStats();
+
+if (heapBytes() !== null) {
+    setInterval(() => {
+        const heap = heapBytes();
+        if (heapNowCell && heap !== null) {
+            const text = megabytes(heap);
+            // an unchanged cell is left alone, selection and all
+            if (heapNowCell.textContent !== text) {
+                heapNowCell.textContent = text;
+            }
+        }
+    }, HEAP_REFRESH_MS);
+}
