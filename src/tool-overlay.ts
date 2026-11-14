@@ -160,6 +160,8 @@ class ToolOverlay extends Element {
     private outlineMesh: Mesh;
     private fillMesh: Mesh;
     private texture: Texture;
+    private fillMaterial: ShaderMaterial;
+    private fillColorValue = FILL_COLOR;
     private initialized = false;
 
     // per-mesh instance lists and last-uploaded geometry, so unchanged
@@ -178,6 +180,19 @@ class ToolOverlay extends Element {
         super(ElementType.debug);
         this.baseEntity = new Entity('toolOverlayBase');
         this.ghostEntity = new Entity('toolOverlayGhost');
+    }
+
+    // the plane fill color as [r, g, b, a]
+    set fillColor(value: number[]) {
+        this.fillColorValue = value;
+        this.fillMaterial?.setParameter('fillColor', value);
+        if (this.scene) {
+            this.scene.forceRender = true;
+        }
+    }
+
+    get fillColor() {
+        return this.fillColorValue;
     }
 
     add() {
@@ -251,7 +266,8 @@ class ToolOverlay extends Element {
         const fillBase = makeMaterial('toolOverlayFillBase', fillVertexShader, fillFragmentShader, false);
         fillBase.blendState = blend;
         fillBase.cull = CULLFACE_BACK;
-        fillBase.setParameter('fillColor', FILL_COLOR);
+        fillBase.setParameter('fillColor', this.fillColorValue);
+        this.fillMaterial = fillBase;
 
         const makeMesh = () => {
             const mesh = new Mesh(device);
