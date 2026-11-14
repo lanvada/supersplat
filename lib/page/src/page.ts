@@ -34,16 +34,22 @@ type SpinResult = {
     kernel: { cpuMedianMs: number; gpuMedianMs: number | null; width: number; height: number };
 };
 
-type Slot = {
-    id: string;
-    container: HTMLDivElement;
-    core: Core;
+// what the data panel shows of an instance
+type Figures = {
     adapter: AdapterInfo;
     frames: number;
     filename: string | null;
     count: number | null;
     load: LoadTimings | null;
     spin: SpinResult | null;
+};
+
+type Slot = Figures & {
+    id: string;
+    container: HTMLDivElement;
+    core: Core;
+    // aborted on destroy: removes what the page attached outside the instance
+    teardown: AbortController;
 };
 
 const MAIN = 'main';
@@ -57,6 +63,19 @@ const slots = new Map<string, Slot>();
 let fixedSize: { width: number; height: number } | null = null;
 let lastFile: File | null = null;
 let heapSamples: (number | null)[] = [];
+// The figures of the main instance outlive it, so that a destroy or a cycle
+// does not empty the panel. A copy: the slot itself holds the instance.
+let lastFigures: Figures | null = null;
+
+// How many destroyed instances the browser has collected so far. This is the
+// one figure about memory every browser gives; collection itself comes when
+// the browser chooses, so a count that lags is not yet a leak.
+let destroyedCount = 0;
+let collectedCount = 0;
+const collected = new FinalizationRegistry(() => {
+    collectedCount++;
+    renderStats();
+});
 // One action of the controls at a time. Each awaits the kernel, and a second
 // one started meanwhile would create or destroy an instance under the first:
 // two cores for one slot, of which only the later could ever be destroyed.
@@ -133,15 +152,17 @@ const showBackground = (container: HTMLElement, clr: Color) => {
 
 const renderStats = () => {
     const slot = slots.get(MAIN);
+    const figures: Figures | null = slot ?? lastFigures;
     // the browser first: a screenshot of these rows is then a complete report
     const rows: [string, string][] = [['Browser', navigator.userAgent]];
 
-    if (slot) {
-        const { adapter, load, spin } = slot;
+    if (figures) {
+        const { adapter, load, spin } = figures;
+        rows.push(['Instance', slot ? 'live' : 'destroyed (the figures below are its last)']);
         rows.push(['Adapter', `${adapter.description || 'unknown'}${adapter.fallback ? ' (fallback adapter)' : ''}`]);
-        if (slot.filename) {
-            rows.push(['File', slot.filename]);
-            rows.push(['Gaussians', slot.count.toLocaleString()]);
+        if (figures.filename) {
+            rows.push(['File', figures.filename]);
+            rows.push(['Gaussians', figures.count.toLocaleString()]);
         }
         if (load) {
             rows.push([
@@ -149,7 +170,7 @@ const renderStats = () => {
                 `read and decode ${round(load.readDecodeMs)}, sort ${round(load.sortMs)}, upload ${round(load.uploadMs)}, add ${round(load.addMs)}, total ${round(load.totalMs)}`
             ]);
         }
-        rows.push(['Frames rendered', String(slot.frames)]);
+        rows.push(['Frames rendered', String(figures.frames)]);
         if (spin) {
             const { kernel } = spin;
             rows.push([
@@ -164,10 +185,15 @@ const renderStats = () => {
             ]);
         }
     }
+    if (destroyedCount > 0) {
+        rows.push(['Destroyed instances', `${destroyedCount}, of which the browser has collected ${collectedCount}`]);
+    }
     if (heapSamples.length > 0) {
         rows.push([
             'JS heap after each cycle (MB)',
-            heapSamples.map((bytes) => (bytes === null ? 'n/a' : round(bytes / 1048576))).join(', ')
+            heapSamples.every((bytes) => bytes === null)
+                ? 'this browser gives no heap figure: read the size of its processes from the system instead'
+                : heapSamples.map((bytes) => (bytes === null ? 'n/a' : round(bytes / 1048576))).join(', ')
         ]);
     }
 
@@ -229,6 +255,7 @@ const create = async (id = MAIN, config?: CoreOptions['config']) => {
         id,
         container,
         core,
+        teardown: new AbortController(),
         adapter: adapterOf(core),
         frames: 0,
         filename: null,
@@ -242,11 +269,17 @@ const create = async (id = MAIN, config?: CoreOptions['config']) => {
         slot.frames++;
     });
 
-    // validation errors reach nobody unless a host listens for them
+    // Validation errors reach nobody unless a host listens for them. The
+    // listener goes with the instance: the engine keeps the device it drew with
+    // last, and this closure would keep the instance alive through it.
     const { wgpu } = core.scene.graphicsDevice as unknown as { wgpu?: GPUDevice };
-    wgpu?.addEventListener('uncapturederror', (event) => {
-        logError(`WebGPU (${id}): ${(event as GPUUncapturedErrorEvent).error.message}`);
-    });
+    wgpu?.addEventListener(
+        'uncapturederror',
+        (event) => {
+            logError(`WebGPU (${id}): ${(event as GPUUncapturedErrorEvent).error.message}`);
+        },
+        { signal: slot.teardown.signal }
+    );
     core.events.on('bgClr', (clr: Color) => showBackground(container, clr));
     showBackground(container, core.events.invoke('bgClr'));
 
@@ -392,6 +425,13 @@ const spin = async (id = MAIN, options: { frames?: number; seconds?: number } = 
 const destroy = (id = MAIN) => {
     const slot = slotOf(id);
     slots.delete(id);
+    if (id === MAIN) {
+        const { adapter, frames, filename, count, load, spin } = slot;
+        lastFigures = { adapter, frames, filename, count, load, spin };
+    }
+    destroyedCount++;
+    collected.register(slot.core.scene, undefined);
+    slot.teardown.abort();
     slot.core.destroy();
     slot.container.remove();
     renderStats();
