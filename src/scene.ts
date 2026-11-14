@@ -213,6 +213,9 @@ class Scene {
     contentRoot: Entity;
     cameraRoot: Entity;
 
+    // aborted by destroy() to release what the constructor attached to the container
+    private teardown = new AbortController();
+
     constructor(
         events: Events,
         config: SceneConfig,
@@ -314,6 +317,7 @@ class Scene {
 
         const canvasContainer = container;
         observer.observe(canvasContainer);
+        this.teardown.signal.addEventListener('abort', () => observer.disconnect());
 
         // Uniform "user is dragging" signal for every tool. canvasContainer is the
         // common ancestor of the canvas (where the engine's gizmos listen) and of
@@ -328,7 +332,7 @@ class Scene {
                     this.forceInteracting = true;
                 }
             },
-            true
+            { capture: true, signal: this.teardown.signal }
         );
 
         // configure depth layers to handle dynamic refraction
@@ -446,6 +450,20 @@ class Scene {
         splats.forEach((splat) => {
             (splat as Splat).destroy();
         });
+    }
+
+    // Tear the scene down for good. Elements go first, while the device they
+    // release their resources on still exists (the camera's controller also
+    // holds window listeners); destroying the app then destroys the graphics
+    // device, which frees the GPU memory.
+    destroy() {
+        this.clear();
+        this.elements
+            .slice()
+            .reverse()
+            .forEach((element) => this.remove(element));
+        this.teardown.abort();
+        this.app.destroy();
     }
 
     // elements removed while their add() was still awaiting element.add().
