@@ -161,7 +161,9 @@ class ToolOverlay extends Element {
     private fillMesh: Mesh;
     private texture: Texture;
     private fillMaterial: ShaderMaterial;
+    private fillTopMaterial: ShaderMaterial;
     private fillColorValue = FILL_COLOR;
+    private fillOnTopValue = false;
     private initialized = false;
 
     // per-mesh instance lists and last-uploaded geometry, so unchanged
@@ -186,6 +188,7 @@ class ToolOverlay extends Element {
     set fillColor(value: number[]) {
         this.fillColorValue = value;
         this.fillMaterial?.setParameter('fillColor', value);
+        this.fillTopMaterial?.setParameter('lineColor', value);
         if (this.scene) {
             this.scene.forceRender = true;
         }
@@ -193,6 +196,22 @@ class ToolOverlay extends Element {
 
     get fillColor() {
         return this.fillColorValue;
+    }
+
+    // Where the fill is drawn. Off, it is among the gaussians: those in front
+    // cover it, and its stochastic depth writes hide a share of those behind,
+    // which reads as the fill colour only when that colour is near opaque.
+    // On, it is blended over the rendered scene after the splat layer, never
+    // occluded and writing no depth, so a faint fill tints what lies under it.
+    set fillOnTop(value: boolean) {
+        this.fillOnTopValue = value;
+        if (this.scene) {
+            this.scene.forceRender = true;
+        }
+    }
+
+    get fillOnTop() {
+        return this.fillOnTopValue;
     }
 
     add() {
@@ -269,6 +288,12 @@ class ToolOverlay extends Element {
         fillBase.setParameter('fillColor', this.fillColorValue);
         this.fillMaterial = fillBase;
 
+        // the fill on top is one flat colour, which the line shaders draw
+        const fillTop = makeMaterial('toolOverlayFillTop', lineVertexShader, lineFragmentShader, true);
+        fillTop.cull = CULLFACE_BACK;
+        fillTop.setParameter('lineColor', this.fillColorValue);
+        this.fillTopMaterial = fillTop;
+
         const makeMesh = () => {
             const mesh = new Mesh(device);
             mesh.setPositions([0, 0, 0, 0, 0, 0, 0, 0, 0]);
@@ -288,7 +313,7 @@ class ToolOverlay extends Element {
                 // opaque action (as the infinite grid does). Keep alpha
                 // blending, but render the fill in that opaque action so its
                 // stochastic depth writes survive into the later MRT pass.
-                if (mesh === this.fillMesh) {
+                if (material === fillBase) {
                     meshInstance.transparent = false;
                 }
                 meshInstance.visible = false;
@@ -312,6 +337,7 @@ class ToolOverlay extends Element {
 
         this.ghostEntity.addComponent('render', {
             meshInstances: makeInstances([
+                [this.fillMesh, fillTop],
                 [this.lineMesh, lineGhost],
                 [this.dotMesh, dotGhost]
             ])
@@ -491,6 +517,14 @@ class ToolOverlay extends Element {
             );
         }
         updateMesh(this.fillMesh, fillPositions);
+
+        // one pass draws the fill, never both
+        const idle = this.fillOnTopValue ? this.fillMaterial : this.fillTopMaterial;
+        this.instances.get(this.fillMesh).forEach((meshInstance) => {
+            if (meshInstance.material === idle) {
+                meshInstance.visible = false;
+            }
+        });
     }
 }
 
