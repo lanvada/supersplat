@@ -44,7 +44,7 @@ What a host should know (from the source unless marked as checked by the smoke):
 | `src/localization.ts`                | Stands in for `src/ui/localization`, the one UI module the kernel imports.                                           |
 | `rollup.config.mjs`, `tsconfig.json` | The library build.                                                                                                   |
 | `seams.json`                         | What the seam check is told: bus functions that are expected to be missing, and the names behind computed bus calls. |
-| `page/`                              | The bare page: one canvas, a file picker, timings. Also what the smoke drives.                                       |
+| `page/`                              | The bare page: one canvas, a file picker, timings, an outline to judge on a real scene. Also what the smoke drives.  |
 | `scripts/`                           | Build, checks, packaging, upgrade and page deploy (below).                                                           |
 
 ## Commands
@@ -55,7 +55,7 @@ All from the repository root, after `npm ci`.
 | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `node lib/scripts/build.mjs [--only lib\|page]`            | Builds the library into `lib/dist` (bundle, module graph, declarations), then the bare page into `lib/page/dist`. A bundler warning or a type error fails it. |
 | `node lib/scripts/check-seams.mjs [--verbose]`             | Checks the seams of the last build (below).                                                                                                                   |
-| `CHROME_PATH=… node lib/scripts/smoke.mjs`                 | Drives the bare page in headless Chromium: create, load, render, select, hide, undo, transform, overlay, tools, teardown, two instances.                      |
+| `CHROME_PATH=… node lib/scripts/smoke.mjs`                 | Drives the bare page in headless Chromium: create, load, render, select, hide, undo, transform, outline, overlay, tools, teardown, two instances.             |
 | `CHROME_PATH=… node lib/scripts/verify.mjs`                | The gate: all of the above plus lint and format of `lib`, and upstream's build, lint, format check and tests.                                                 |
 | `node lib/scripts/pack.mjs [n]`                            | Writes the release tarball `lib/dist/supersplat-lib-<upstream version>-lib.<n>.tgz` and prints its integrity hash.                                            |
 | `node lib/scripts/deploy-page.mjs`                         | Replaces the `gh-pages` branch with the built bare page.                                                                                                      |

@@ -243,6 +243,8 @@ const renderStats = () => {
     element<HTMLButtonElement>('spin').disabled = busy || !slot?.filename;
     element<HTMLButtonElement>('destroy').disabled = busy || !slot;
     element<HTMLButtonElement>('cycle').disabled = busy || !lastFile;
+    element<HTMLButtonElement>('outline').disabled = busy || !slot?.filename;
+    element<HTMLButtonElement>('outline-clear').disabled = busy || !slot?.filename;
 };
 
 // Sizes the viewports created from now on to a fixed CSS size instead of the
@@ -505,6 +507,31 @@ const stats = (id = MAIN) => {
     };
 };
 
+// Selects the gaussians within `radius` of the point the camera orbits, in the
+// scene's units, and shows the selection as a host that marks an object does:
+// a white outline and nothing else, without upstream's centre dots. This is
+// how the outline is judged on a real scene, which has no objects to pick.
+const outline = async (id = MAIN, radius = 0.5) => {
+    const { core } = slotOf(id);
+    const { events, scene } = core;
+    events.fire('setSelectedClr', new Color(1, 1, 1, 1));
+    events.fire('view.setSelectionCenters', false);
+    events.fire('view.setOutlineSelection', true);
+    // the kernel takes a volume as the transform of a sphere of diameter 1
+    const diameter = radius * 2;
+    const volume = new Mat4().setTRS(scene.camera.focalPoint, Quat.IDENTITY, new Vec3(diameter, diameter, diameter));
+    await core.editor.selection.byVolume('sphere', volume, 'replace');
+    await settle(id);
+    const selected = core.editor.layers.list().reduce((sum, layer) => sum + layer.selected, 0);
+    log(`outline: ${selected.toLocaleString()} gaussians within ${radius} of the orbit centre`);
+    return { selected };
+};
+
+const clearOutline = async (id = MAIN) => {
+    await slotOf(id).core.editor.selection.none();
+    await settle(id);
+};
+
 // the slot's viewport rectangle in CSS pixels, for a script that crops screenshots to it
 const rect = (id = MAIN) => {
     const { x, y, width, height } = slotOf(id).container.getBoundingClientRect();
@@ -523,6 +550,8 @@ const page = {
     spin,
     destroy,
     cycle,
+    outline,
+    clearOutline,
     stats,
     rect,
     core: (id = MAIN) => slots.get(id)?.core ?? null,
@@ -601,6 +630,19 @@ element('cycle').addEventListener('click', () => {
         }
         await cycle(MAIN, numberOf('cycle-count', 3), lastFile.name, lastFile, loadOptions());
     });
+});
+
+const radiusOf = (id: string, fallback: number) => {
+    const value = parseFloat(element<HTMLInputElement>(id).value);
+    return Number.isFinite(value) && value > 0 ? value : fallback;
+};
+
+element('outline').addEventListener('click', () => {
+    run(() => outline(MAIN, radiusOf('outline-radius', 0.5)));
+});
+
+element('outline-clear').addEventListener('click', () => {
+    run(() => clearOutline(MAIN));
 });
 
 // a phone has no console to read: show errors on the page as well
